@@ -1,0 +1,10 @@
+fastapi==0.162.0
+uvicorn==0.54.0
+psycopg[binary]==3.3.6
+PyNaCl==1.6.2
+httpx==0.28.1
+qrcode==8.2
+pillow==13.0.0
+onnxruntime==1.31.1
+tokenizers==0.23.3
+numpy==2.5.4
