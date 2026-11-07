@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <title>微信密码库 · 管理</title>
+  <link rel="stylesheet" href="/static/css/console.css">
+  <script type="module" src="/static/js/main.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="微信密码库首页"><span class="brand-mark" aria-hidden="true">密</span><span>微信密码库<small>你的私人账号记录</small></span></a>
+      <div class="connection-note"><span class="dot"></span>通过 SSH 隧道管理</div>
+      <nav class="navigation" aria-label="管理导航" id="navigation" hidden>
+        <button type="button" data-view="entries" class="nav-item active" aria-current="page"><span>账号记录</span><span id="nav-entry-count" class="count">0</span></button>
+        <button type="button" data-view="trash" class="nav-item"><span>回收站</span><span id="nav-trash-count" class="count">0</span></button>
+        <button type="button" data-view="settings" class="nav-item"><span>微信与 AI</span></button>
+        <button type="button" data-view="logs" class="nav-item"><span>查询日志</span></button>
+      </nav>
+      <div class="sidebar-footer"><p>记录加密保存在服务器。<br>主密码用于管理登录，不会写入磁盘。</p><button type="button" id="lock-button" class="button button-quiet" hidden>锁定管理端</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="page-header"><div><p class="eyebrow">PERSONAL VAULT</p><h1 id="page-title">正在连接密码库</h1><p class="muted" id="page-description">正在检查服务状态。</p></div><span class="status-pill" id="vault-status">连接中</span></header>
+      <div class="query-summary"><span class="status-pill" id="query-status">检查微信查询状态</span><p class="muted small" id="query-description"></p></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="loading-panel" class="empty-state"><span class="spinner" aria-hidden="true"></span><p>正在读取密码库状态…</p><button type="button" id="retry-button" class="button button-secondary" hidden>重新连接</button></section>
+
+      <section id="setup-panel" class="auth-panel" hidden aria-labelledby="setup-title">
+        <div class="section-icon" aria-hidden="true">✦</div><h2 id="setup-title">创建你的密码库</h2><p class="muted">设置一个主密码用于管理端登录。微信查询独立运行，服务重启后自动恢复。</p>
+        <form id="setup-form" autocomplete="off">
+          <label for="setup-password">主密码</label><input id="setup-password" type="password" autocomplete="new-password" required minlength="12" spellcheck="false" placeholder="至少 12 个字符">
+          <label for="setup-confirm">再次输入主密码</label><input id="setup-confirm" type="password" autocomplete="new-password" required minlength="12" spellcheck="false">
+          <p class="field-help">初始化后会显示一次恢复密钥，请保存在服务器之外。</p><button type="submit" class="button button-primary full-width">创建加密密码库</button>
+        </form>
+      </section>
+
+      <section id="unlock-panel" class="auth-panel" hidden aria-labelledby="unlock-title">
+        <div class="section-icon" aria-hidden="true">◇</div><h2 id="unlock-title">管理端已锁定</h2><p class="muted">登录后管理账号记录。退出或锁定管理端不会停止已启用的微信查询。</p>
+        <form id="unlock-form" autocomplete="off"><label for="unlock-password">主密码或恢复密钥</label><input id="unlock-password" type="password" autocomplete="off" required spellcheck="false" autofocus><button type="submit" class="button button-primary full-width">登录管理端</button></form>
+      </section>
+
+      <section id="entries-panel" hidden aria-labelledby="records-heading">
+        <div class="toolbar"><label class="search-field" for="entry-search"><span class="sr-only">搜索记录</span><span aria-hidden="true">⌕</span><input id="entry-search" type="search" placeholder="搜索系统、网址、账号、描述或标签" autocomplete="off" spellcheck="false" aria-describedby="filter-help"></label><div class="toolbar-actions"><label class="reuse-option"><input id="include-reuse" type="checkbox">包含密码复用提醒</label><button type="button" id="duplicates-button" class="button button-secondary">检查重复</button><button type="button" id="new-entry-button" class="button button-primary">＋ 新增记录</button></div></div>
+        <section class="record-filters" aria-label="搜索与筛选">
+          <div class="filter-grid">
+            <label>搜索范围<select id="filter-field"><option value="all">全部可搜索信息</option><option value="title">系统名称</option><option value="service">网址</option><option value="username">账号</option><option value="description">检索描述</option></select></label>
+            <label>标签范围<select id="filter-tag-scope"><option value="all">全部记录</option><option value="tagged">有标签</option><option value="untagged">无标签</option></select></label>
+            <label>日期类型<select id="filter-date-field"><option value="created_at">创建日期</option><option value="updated_at">更新日期</option></select></label>
+            <label>开始日期<input id="filter-from" type="date" aria-describedby="filter-date-error"></label>
+            <label>结束日期<input id="filter-to" type="date" aria-describedby="filter-date-error"></label>
+            <label>排序<select id="filter-sort"><option value="updated_desc">最近更新优先</option><option value="created_desc">最新创建优先</option><option value="created_asc">最早创建优先</option><option value="title_asc">系统名称升序</option><option value="title_desc">系统名称降序</option></select></label>
+          </div>
+          <div class="filter-tags-heading"><strong>按标签筛选</strong><label class="filter-mode">多选方式<select id="filter-tag-mode"><option value="any">匹配任一标签</option><option value="all">包含全部标签</option></select></label></div>
+          <div id="filter-tags" class="filter-tags" role="group" aria-label="选择标签"></div>
+          <p id="filter-date-error" class="inline-error" role="alert" hidden>开始日期不能晚于结束日期，请调整日期范围。</p>
+          <div class="filter-footer"><p id="filter-help" class="muted small">关键词用空格分隔可同时匹配；日期包含起止当天，按当前设备时区计算。</p><button type="button" id="reset-filters" class="text-button">重置搜索与筛选</button></div>
+        </section>
+        <div id="duplicates-panel" class="duplicates-panel" hidden><div class="section-heading"><h2>重复与复用检查</h2><button type="button" id="close-duplicates" class="text-button">收起</button></div><p class="muted small">综合系统名称、网址、账号和密码判断。资料不同、历史版本与密码复用分别提示，不自动合并或删除。</p><div id="duplicate-groups"></div></div>
+        <div class="section-heading records-heading"><h2 id="records-heading">全部记录</h2><span id="visible-count" class="muted small" role="status" aria-live="polite"></span></div>
+        <div id="entries-list" class="entries-list"></div>
+        <div id="entries-empty" class="empty-state" hidden><div class="empty-glyph" aria-hidden="true">＋</div><h3 id="empty-title">先添加第一条账号记录</h3><p id="empty-description" class="muted">填好用途和场景，以后就能在微信里用自然语言找到它。</p></div>
+      </section>
+
+      <section id="query-logs-panel" hidden aria-labelledby="query-logs-heading">
+        <div class="section-heading"><h2 id="query-logs-heading">最近查询</h2><button type="button" id="refresh-query-logs" class="button button-secondary">刷新日志</button></div>
+        <p class="muted small">显示最近 50 次查询，日志加密保留 30 天、最多 2000 条。账号和密码不记入日志。相似度表示文本接近程度，不是匹配正确率。</p>
+        <div id="query-log-list"></div><p id="query-logs-empty" class="empty-state" hidden>尚无查询日志。升级后从微信发起查询，即可在这里查看。</p>
+      </section>
+
+      <section id="settings-panel" hidden>
+        <div class="settings-grid">
+          <article class="settings-card"><div class="section-heading"><h2>微信连接</h2><span id="wechat-status" class="status-pill">未绑定</span></div><p class="muted">扫描二维码绑定你自己的微信。服务只接受这个账号的请求。</p><dl class="detail-list"><dt>绑定账号</dt><dd id="wechat-owner">尚未绑定</dd><dt>连接状态</dt><dd id="wechat-connection">等待绑定</dd></dl><p id="wechat-error" class="inline-error" hidden></p><button type="button" id="bind-wechat-button" class="button button-primary">生成绑定二维码</button>
+            <div id="wechat-qr-panel" class="qr-panel" hidden><img id="wechat-qr-image" width="240" height="240" alt="使用你的微信扫描此二维码"><p id="wechat-qr-state" class="muted">请用微信扫码并确认授权。</p><form id="wechat-verify-form" autocomplete="off" hidden><label for="wechat-verify-code">微信验证码</label><div class="inline-form"><input id="wechat-verify-code" autocomplete="off" spellcheck="false" required><button type="submit" class="button button-secondary">继续验证</button></div></form><button type="button" id="cancel-wechat-button" class="text-button">取消本次绑定</button></div>
+          </article>
+          <article class="settings-card"><div class="section-heading"><h2>DeepSeek Flash</h2><span id="model-status" class="status-pill">未配置</span></div><p class="muted">中文语义模型在云端生成查询和描述向量；DeepSeek Flash 关闭思考模式，负责理解和排序。</p><div class="privacy-note"><strong>发送给 AI 的内容</strong><p>标题、服务、检索描述、标签和你的查询。账号、密码、私密备注和自定义字段不会发送。</p></div><form id="deepseek-form" autocomplete="off"><label for="deepseek-key">API Key</label><input id="deepseek-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" placeholder="输入后加密保存" required><p class="field-help">已保存的 Key 不会回显。填写新值可以替换。</p><button type="submit" class="button button-primary">保存 API Key</button></form></article>
+        </div>
+        <article class="settings-card usage-card"><h2>在微信中这样使用</h2><div class="usage-examples"><p>“去年那个测试项目的后台账号”</p><p>“找出测试项目后台账号，返回前 5 条”</p><p>“检查这些账号有没有重复”</p></div><p class="muted small">微信仅查询和查重，默认最多返回 3 条，可要求 5 条；精确结果优先，相近候选标为弱匹配。每条仅含系统名称、网址、账号和密码。新增、修改、删除和恢复请在本页操作；删除后进入加密回收站，30 天内可以恢复。</p></article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="entry-dialog" class="entry-dialog"><form id="entry-form" autocomplete="off"><div class="dialog-header"><div><p class="eyebrow">ACCOUNT RECORD</p><h2 id="entry-dialog-title">新增记录</h2></div><button type="button" id="close-entry-dialog" class="icon-button" aria-label="关闭编辑">×</button></div>
+      <div class="dialog-body"><div class="form-section"><h3>用于查找的信息</h3><p class="field-help">以下内容可以用于 AI 检索，请不要填入密码或其他秘密。</p><div class="form-grid"><div><label for="entry-title">系统名称 <span class="required">*</span></label><input id="entry-title" required maxlength="256" autocomplete="off" placeholder="例如：测试项目管理后台"></div><div><label for="entry-service">网址（选填）</label><input id="entry-service" maxlength="256" autocomplete="off" placeholder="例如：https://example.com/login"></div></div><label for="entry-description">检索描述</label><textarea id="entry-description" rows="3" maxlength="2000" placeholder="什么时候、为哪个项目注册，平时用来做什么…"></textarea><label for="entry-tags">标签（可不选）</label><input id="entry-tags" autocomplete="off" aria-describedby="tag-choice-status" placeholder="输入新标签，以逗号分隔；也可选择下方已有标签"><div id="tag-choices" class="tag-choices" role="group" aria-label="已有标签"></div><p id="tag-choice-status" class="field-help" aria-live="polite"></p></div>
+      <div class="form-section secret-section"><h3>机密内容</h3><p class="field-help">加密存储，由程序读取，不交给 AI。</p><div class="form-grid"><div><label for="entry-username">账号</label><input id="entry-username" maxlength="4096" autocomplete="off" spellcheck="false"></div><div><label for="entry-password">密码 <span id="password-edit-hint" class="label-hint" hidden>留空保留原值</span></label><div class="password-input"><input id="entry-password" type="password" maxlength="10000" autocomplete="new-password" spellcheck="false"><button type="button" id="toggle-entry-password" class="text-button" aria-label="显示输入的密码">显示</button></div></div></div><label for="entry-notes">私密备注 / 原始记录</label><textarea id="entry-notes" rows="3" maxlength="65536" placeholder="可保存原始文字、恢复信息或其他不希望交给 AI 的内容。"></textarea><div class="section-heading custom-field-heading"><label>自定义机密字段</label><button type="button" id="add-custom-field" class="text-button">＋ 添加字段</button></div><div id="custom-fields"></div></div></div>
+      <div class="dialog-footer"><button type="button" id="cancel-entry-dialog" class="button button-secondary">取消</button><button type="submit" class="button button-primary">保存记录</button></div>
+    </form></dialog>
+
+  <dialog id="recovery-dialog" class="recovery-dialog"><div class="dialog-header"><h2>保存恢复密钥</h2></div><div class="dialog-body"><p>这是找回密码库的另一把钥匙。请把它保存在服务器之外，例如离线纸张或安全的本地介质中。</p><p class="muted">主密码和恢复密钥都遗失后，已有记录无法解密。关闭后这里不会再次显示。</p><div id="recovery-key" class="recovery-key" tabindex="0"></div><button type="button" id="copy-recovery-key" class="button button-secondary">复制恢复密钥</button><label class="checkbox-label"><input type="checkbox" id="recovery-saved">我已将恢复密钥保存在安全的位置</label></div><div class="dialog-footer"><button type="button" id="finish-recovery" class="button button-primary" disabled>完成</button></div></dialog>
+  <noscript><p class="noscript-warning">此管理页需要开启 JavaScript。数据只在本页内存中处理，不写入浏览器本地存储。</p></noscript>
+</body>
+</html>
