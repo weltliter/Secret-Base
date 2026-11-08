@@ -1,0 +1,4 @@
+CREATE ROLE vault_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+ALTER DATABASE vault OWNER TO vault_app;
+\connect vault
+ALTER SCHEMA public OWNER TO vault_app;

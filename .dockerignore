@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!requirements.txt
+!vault/
+!vault/**
+**/__pycache__/
+**/*.pyc
+**/*.pem
+**/*.key
