@@ -1,9 +1,26 @@
 """PostgreSQL persistence. Business values arrive here only as ciphertext."""
 import os
+import uuid
 from contextlib import contextmanager
 
 import psycopg
 from psycopg.rows import dict_row
+
+from .crypto import json_decrypt, unlock_envelope, validate_envelope
+
+SCHEMA_VERSION = 2
+CRYPTO_FORMAT = 1
+APP_VERSION = "1.1"
+BUSINESS_TABLES = ("entries", "settings", "processed_messages", "audit", "query_logs")
+
+
+def check_metadata(value):
+    if value is not None:
+        if value["schema_version"] != SCHEMA_VERSION or value["crypto_format"] != CRYPTO_FORMAT:
+            raise ValueError("不支持的数据库或加密格式版本，请使用兼容的应用版本")
+        uuid.UUID(str(value["vault_id"]))
+        validate_envelope(bytes(value["envelope"]))
+    return value
 
 
 class Store:
@@ -15,9 +32,48 @@ class Store:
         with psycopg.connect(self.dsn, row_factory=dict_row, connect_timeout=5) as conn:
             yield conn
 
-    def initialize(self):
+    @staticmethod
+    def _metadata(conn):
+        if not conn.execute("SELECT to_regclass('vault_metadata') AS name").fetchone()["name"]:
+            return None
+        rows = conn.execute("SELECT * FROM vault_metadata").fetchall()
+        if len(rows) > 1 or (rows and rows[0]["id"] != 1):
+            raise ValueError("数据库元数据无效")
+        return check_metadata(rows[0] if rows else None)
+
+    @staticmethod
+    def _check_schema(conn):
+        if conn.execute("SELECT to_regclass('vault_schema') AS name").fetchone()["name"]:
+            versions = conn.execute("SELECT id, version FROM vault_schema").fetchall()
+            if len(versions) != 1 or versions[0]["id"] != 1 or versions[0]["version"] != SCHEMA_VERSION:
+                raise ValueError("不支持的数据库结构版本，请使用兼容的应用版本")
+
+    @staticmethod
+    def _has_data(conn):
+        # Names are a fixed application allowlist, never request input.
+        for name in BUSINESS_TABLES:
+            if conn.execute("SELECT to_regclass(%s) AS name", (name,)).fetchone()["name"]:
+                if conn.execute(f"SELECT EXISTS(SELECT 1 FROM {name}) AS present").fetchone()["present"]:
+                    return True
+        return False
+
+    def initialize(self, *, allow_legacy=False):
         with self.connection() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(1927711011)")
+            self._check_schema(conn)
+            metadata = self._metadata(conn)
+            if metadata is None and self._has_data(conn) and not allow_legacy:
+                raise ValueError("数据库已有数据但缺少密钥信封，请先备份并执行旧版迁移")
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS vault_schema (
+                    id integer PRIMARY KEY CHECK(id=1), version integer NOT NULL
+                );
+                INSERT INTO vault_schema(id,version) VALUES(1,2) ON CONFLICT(id) DO NOTHING;
+                CREATE TABLE IF NOT EXISTS vault_metadata (
+                    id integer PRIMARY KEY CHECK(id=1), schema_version integer NOT NULL,
+                    vault_id uuid NOT NULL UNIQUE, crypto_format integer NOT NULL,
+                    app_version text NOT NULL, envelope bytea NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS entries (
                     id uuid PRIMARY KEY, payload bytea NOT NULL,
                     version integer NOT NULL DEFAULT 1,
@@ -31,6 +87,63 @@ class Store:
                 CREATE TABLE IF NOT EXISTS query_logs (id uuid PRIMARY KEY, payload bytea NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
                 CREATE INDEX IF NOT EXISTS query_logs_created_idx ON query_logs(created_at DESC);
             """)
+
+    def read_metadata(self):
+        with self.connection() as conn:
+            self._check_schema(conn)
+            value = self._metadata(conn)
+            if value is not None:
+                value["envelope"] = bytes(value["envelope"])
+                value["vault_id"] = str(value["vault_id"])
+            return value
+
+    def read_envelope(self):
+        metadata = self.read_metadata()
+        return metadata["envelope"] if metadata else None
+
+    @staticmethod
+    def _insert_envelope(conn, raw):
+        conn.execute("""INSERT INTO vault_metadata
+            (id,schema_version,vault_id,crypto_format,app_version,envelope)
+            VALUES(1,%s,%s,%s,%s,%s)""",
+            (SCHEMA_VERSION, uuid.uuid4(), CRYPTO_FORMAT, APP_VERSION, raw))
+
+    def initialize_vault(self, raw):
+        validate_envelope(raw)
+        with self.connection() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(1927711011)")
+            self._check_schema(conn)
+            conn.execute("LOCK TABLE vault_metadata, entries, settings, processed_messages, audit, query_logs IN SHARE ROW EXCLUSIVE MODE")
+            if self._metadata(conn) is not None:
+                raise ValueError("密码库已经初始化")
+            if self._has_data(conn):
+                raise ValueError("数据库已有数据，请恢复配套的密钥信封，不要重新初始化")
+            self._insert_envelope(conn, raw)
+
+    @staticmethod
+    def _verify_all(conn, key):
+        for table, prefix in (("entries", "entry:"), ("settings", "settings:v1"), ("query_logs", "query-log:")):
+            with conn.cursor(name="verify_" + table) as cursor:
+                cursor.itersize = 100
+                cursor.execute(f"SELECT id,payload FROM {table}")
+                for row in cursor:
+                    context = prefix if table == "settings" else prefix + str(row["id"])
+                    json_decrypt(key, bytes(row["payload"]), context)
+
+    def import_legacy_envelope(self, raw, password):
+        key = unlock_envelope(raw, password)
+        with self.connection() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(1927711011)")
+            self._check_schema(conn)
+            conn.execute("LOCK TABLE vault_metadata, entries, settings, processed_messages, audit, query_logs IN SHARE ROW EXCLUSIVE MODE")
+            existing = self._metadata(conn)
+            if existing is not None and bytes(existing["envelope"]) != raw:
+                raise ValueError("数据库已有不同密钥信封，迁移未执行")
+            self._verify_all(conn, key)
+            if existing is not None:
+                return False
+            self._insert_envelope(conn, raw)
+            return True
 
     def list(self, trash=False):
         with self.connection() as conn:

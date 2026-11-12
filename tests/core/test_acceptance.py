@@ -27,7 +27,7 @@ def test_business_values_and_service_credentials_reach_storage_only_as_ciphertex
     record_id = service.save(deepcopy(original))
     service.update_settings({"deepseek_key": "sk-DEEPSEEK-SENTINEL-5f21", "wechat_token": "WX-SENTINEL-3b14"})
 
-    persisted = store.rows[record_id]["payload"] + store.settings_blob + service.envelope.path.read_bytes()
+    persisted = store.rows[record_id]["payload"] + store.settings_blob + service.envelope.read_bytes()
     for value in [*original.values(), *original["fields"].values(), *original["tags"], "sk-DEEPSEEK-SENTINEL-5f21", "WX-SENTINEL-3b14", recovery]:
         assert str(value).encode() not in persisted
     for field, value in original.items():
@@ -122,6 +122,7 @@ def test_unchanged_password_is_preserved_on_edit(opened_vault):
 def test_missing_envelope_cannot_reinitialize_existing_database(opened_vault, tmp_path):
     service, store, _ = opened_vault
     service.save(entry())
+    store.metadata = None
     broken = VaultService(store, tmp_path / "missing.json")
     with pytest.raises(ValueError, match="数据库已有数据"):
         broken.setup("a completely different password")

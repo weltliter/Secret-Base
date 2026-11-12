@@ -1,5 +1,9 @@
 """In-memory encrypted persistence doubles shared by regression checks."""
 from datetime import datetime, timedelta, timezone
+import uuid
+
+from vault.core.crypto import validate_envelope, unlock_envelope, json_decrypt
+from vault.core.store import check_metadata
 
 
 class ByteStore:
@@ -9,6 +13,45 @@ class ByteStore:
         self.rows = {}
         self.settings_blob = None
         self.query_history = []
+        self.metadata = None
+        self.processed_messages = set()
+        self.audit = []
+
+    def read_metadata(self):
+        return check_metadata(self.metadata)
+
+    def read_envelope(self):
+        value = self.read_metadata()
+        return value["envelope"] if value else None
+
+    def has_data(self):
+        return bool(self.rows or self.settings_blob or self.query_history or self.processed_messages or self.audit)
+
+    def initialize_vault(self, raw):
+        validate_envelope(raw)
+        if self.read_metadata() is not None:
+            raise ValueError("密码库已经初始化")
+        if self.has_data():
+            raise ValueError("数据库已有数据，请恢复配套的密钥信封，不要重新初始化")
+        self.metadata = {"id": 1, "schema_version": 2, "vault_id": str(uuid.uuid4()),
+                         "crypto_format": 1, "app_version": "1.1", "envelope": raw}
+
+    def import_legacy_envelope(self, raw, password):
+        key = unlock_envelope(raw, password)
+        existing = self.read_metadata()
+        if existing and existing["envelope"] != raw:
+            raise ValueError("数据库已有不同密钥信封，迁移未执行")
+        for row in self.rows.values():
+            json_decrypt(key, row["payload"], "entry:" + str(row["id"]))
+        if self.settings_blob:
+            json_decrypt(key, self.settings_blob, "settings:v1")
+        for row in self.query_history:
+            json_decrypt(key, row["payload"], "query-log:" + str(row["id"]))
+        if existing:
+            return False
+        self.metadata = {"id": 1, "schema_version": 2, "vault_id": str(uuid.uuid4()),
+                         "crypto_format": 1, "app_version": "1.1", "envelope": raw}
+        return True
 
     def list(self, trash=False):
         return [row for row in self.rows.values() if (row["deleted_at"] is not None) == trash]
@@ -45,8 +88,10 @@ class ByteStore:
 
 
 class MemoryStore(ByteStore):
-    def initialize(self):
-        pass
+    def initialize(self, *, allow_legacy=False):
+        self.read_metadata()
+        if not self.metadata and self.has_data() and not allow_legacy:
+            raise ValueError("数据库已有数据但缺少密钥信封，请先备份并执行旧版迁移")
 
     def trash(self, expected):
         for record_id, version in expected.items():

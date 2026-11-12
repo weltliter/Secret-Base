@@ -1,17 +1,19 @@
 import threading
+import os
 import time
 import uuid
 
-from .crypto import KeyEnvelope, json_decrypt, json_encrypt
+from .crypto import DatabaseEnvelope, json_decrypt, json_encrypt
 from .duplicates import compare_entries
 from .query_unlock import QueryUnlock
+from .maintenance import maintenance_lock
 
 
 class VaultService:
     def __init__(self, store, envelope_path, query_key_path=None):
         self.store = store
-        self.envelope = KeyEnvelope(envelope_path)
-        self.query_unlock = QueryUnlock(envelope_path, query_key_path)
+        self.envelope = DatabaseEnvelope(store, envelope_path)
+        self.query_unlock = QueryUnlock(self.envelope, query_key_path)
         self.mutex = threading.RLock()
         self.key = None
         self.epoch = 0
@@ -28,7 +30,8 @@ class VaultService:
         return self.key
 
     def setup(self, password):
-        with self.mutex:
+        lock_path = os.environ.get("VAULT_MAINTENANCE_LOCK") or self.envelope.path.parent / ".maintenance.lock"
+        with maintenance_lock(lock_path), self.mutex:
             self.query_unlock.machine_key()
             if self.store.read_settings() or self.store.list() or self.store.list(True):
                 raise ValueError("数据库已有数据，请恢复配套的密钥信封，不要重新初始化")

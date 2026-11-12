@@ -100,7 +100,7 @@ def test_auto_restore_fails_closed_without_opening_admin(running, damage):
     elif damage == "wrong_machine":
         machine.write_bytes(secrets.token_bytes(32))
     elif damage == "changed_envelope":
-        service.envelope.path.write_text(service.envelope.path.read_text() + "\n")
+        store.metadata["envelope"] += b"\n"
     else:
         service.query_unlock.path.write_text('{"version":1,"wrapped":"broken"}')
     restarted = VaultService(store, service.envelope.path, machine)
