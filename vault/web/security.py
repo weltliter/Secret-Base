@@ -63,7 +63,9 @@ def install_security(app, admins, csrf_token):
             request._body = bytes(body)
         public_api = {"/api/status", "/api/csrf", "/api/setup", "/api/unlock", "/api/lock"}
         if request.url.path.startswith("/api/") and request.url.path not in public_api and not admins.valid(request):
-            return failure("管理端已锁定，请使用主密码重新登录。", 423)
+            response = failure("管理端已锁定，请使用主密码重新登录。", 423)
+            admins.clear_cookie(response)
+            return response
         try:
             response = await call_next(request)
         except Exception as exc:
@@ -71,6 +73,8 @@ def install_security(app, admins, csrf_token):
             logging.getLogger("vault.api").error("request failed (%s)", type(exc).__name__)
             return failure("请求暂时无法完成，请检查服务状态后重试", 500)
         response.headers.update(RESPONSE_HEADERS)
+        if response.status_code == 423 and not admins.valid(request):
+            admins.clear_cookie(response)
         return response
 
     @app.exception_handler(ValueError)

@@ -28,15 +28,16 @@ export function createUi(state) {
     if (button.disabled) return;
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
-    try { await action(); } catch (error) { notify(error.message || "操作未完成，请重试。", true); }
+    try { await action(); } catch (error) { if (!error.silent) notify(error.message || "操作未完成，请重试。", true); }
     finally { button.disabled = false; button.removeAttribute("aria-busy"); }
   }
 
   async function copyText(text, message) {
+    const generation = state.generation;
     try {
       await navigator.clipboard.writeText(text);
-      notify(message);
-    } catch (_) { notify("浏览器未允许复制，请选中文字手动复制。", true); }
+      if (generation === state.generation) notify(message);
+    } catch (_) { if (generation === state.generation) notify("浏览器未允许复制，请选中文字手动复制。", true); }
   }
 
   return { notify, busy, copyText };

@@ -4,22 +4,57 @@ import { createRecords } from "./records/index.js";
 import { createSettings } from "./settings/index.js";
 import { bindSession } from "./auth/session.js";
 import { createLogs } from "./logs/index.js";
+import { createProtection } from "./auth/protection.js";
 
-const state = { status: null, view: "entries", entries: [], editing: null, generation: 0, revealed: new Map(), revealTimers: new Map(), qr: null, qrTimer: null, qrStartedAt: 0, qrPolling: false, noticeTimer: null };
+const state = { reauthRequired: true, status: null, view: "entries", entries: [], editing: null, generation: 0, revealed: new Map(), revealTimers: new Map(), qr: null, qrTimer: null, qrStartedAt: 0, qrPolling: false, noticeTimer: null };
 const { notify, busy, copyText } = createUi(state);
-const api = createApi(() => {
-  clearSensitive();
-  if (state.status) state.status.unlocked = false;
-  renderState();
-});
+let protection;
+const transport = createApi((message) => protection.lock(message));
+const api = Object.assign(async (path, ...args) => {
+  if (state.reauthRequired && !["/api/status", "/api/setup", "/api/unlock", "/api/csrf", "/api/lock"].includes(path)) {
+    throw Object.assign(new Error("请先重新登录。"), { silent: true });
+  }
+  return transport(path, ...args);
+}, transport);
 const settings = createSettings({ state, api, notify, busy, loadStatus });
 const records = createRecords({ state, api, notify, busy, copyText, loadStatus });
 const logs = createLogs({ state, api, busy, notify });
 const loadView = () => state.view === "logs" ? logs.load() : records.loadEntries();
-bindSession({ api, notify, busy, copyText, loadStatus, loadEntries: loadView, clearSensitive, changeView });
+protection = createProtection({ api, isAuthenticated: () => !!state.status?.unlocked && !state.reauthRequired, lock: lockLocal });
+bindSession({ api, notify, busy, copyText, loadStatus, loadEntries: loadView, changeView,
+  lock: () => protection.lock("管理端已锁定，微信查询服务保持运行。"),
+  authenticated: () => {
+    if (document.hidden) {
+      protection.lock("页面已切到后台，请重新登录。");
+      throw Object.assign(new Error("页面已锁定。"), { silent: true });
+    }
+    clearSensitive(); // Discard status polls started before this login.
+    state.reauthRequired = false;
+    protection.reset();
+  }
+});
+
+function lockLocal(message) {
+  state.reauthRequired = true;
+  clearSensitive();
+  if (state.status) state.status = publicStatus(state.status);
+  renderState();
+  if (message) notify(message, false, true);
+  void api.revoke();
+}
+
+function publicStatus(status) {
+  return { initialized: status.initialized, unlocked: false, session: null,
+    query_ready: status.query_ready, auto_restore_ready: status.auto_restore_ready,
+    wechat: { bound: status.wechat?.bound, connected: status.wechat?.connected } };
+}
 
 function clearSensitive() {
   state.generation += 1;
+  api.cancel();
+  clearTimeout(state.noticeTimer);
+  $("notice").hidden = true;
+  $("notice").textContent = "";
   state.entries = [];
   state.editing = null;
   state.revealed.clear();
@@ -41,6 +76,8 @@ function clearSensitive() {
   $("unlock-form").reset();
   $("entry-password").type = "password";
   $("recovery-key").textContent = "";
+  $("recovery-saved").checked = false;
+  $("finish-recovery").disabled = true;
   if ($("entry-dialog").open) $("entry-dialog").close();
   if ($("recovery-dialog").open) $("recovery-dialog").close();
 }
@@ -100,9 +137,14 @@ function renderState() {
 async function loadStatus() {
   const generation = state.generation;
   const previousUnlocked = state.status?.unlocked;
-  const status = await api("/api/status");
+  let status = await api("/api/status");
   if (generation !== state.generation) return state.status;
-  if (previousUnlocked && !status.unlocked) clearSensitive();
+  if (previousUnlocked && !status.unlocked) {
+    protection.lock("管理会话已到期，请重新登录。");
+    return state.status;
+  }
+  if (state.reauthRequired) status = publicStatus(status);
+  else protection.sync(status.session);
   state.status = status;
   renderState();
   return status;
@@ -131,7 +173,7 @@ $("navigation").addEventListener("click", (event) => {
 
 async function start() {
   $("retry-button").hidden = true;
-  try { await loadStatus(); await loadView(); }
+  try { await api.revoke(); await loadStatus(); await loadView(); }
   catch (error) {
     pill("vault-status", "连接未完成", "warn");
     $("retry-button").hidden = false;
@@ -139,18 +181,8 @@ async function start() {
   }
 }
 $("retry-button").addEventListener("click", start);
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    state.revealed.clear();
-    state.revealTimers.forEach(clearTimeout);
-    state.revealTimers.clear();
-    if (state.status?.unlocked && ["entries", "trash"].includes(state.view)) records.renderEntries();
-    $("entry-password").type = "password";
-    $("toggle-entry-password").textContent = "显示";
-  }
-});
-window.addEventListener("pagehide", clearSensitive);
-window.addEventListener("pageshow", (event) => { if (event.persisted) start(); });
+// Protection owns visibility, bfcache, offline and sleep handling. Polls only
+// inspect state; they never renew inactivity or silently authenticate.
 setInterval(() => {
   if (!document.hidden) loadStatus().catch(() => {});
 }, 15000);

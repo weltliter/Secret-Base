@@ -6,16 +6,28 @@ from ..schemas import PasswordInput
 
 
 def register(app, service, bot, admins, csrf_token, qr_sessions):
+    def clear_session_artifacts(identity):
+        with service.mutex:
+            for qr in list(qr_sessions):
+                if qr_sessions[qr]["admin"] == identity:
+                    qr_sessions.pop(qr, None)
+
+    admins.on_revoke(clear_session_artifacts)
+
     @app.get("/api/csrf")
     def csrf():
         return {"token": csrf_token}
 
     @app.get("/api/status")
-    def status(request: Request):
+    def status(request: Request, response: Response):
         with service.mutex:
             settings = service.settings() if service.unlocked else {}
-            authenticated = admins.valid(request) and service.unlocked
+            session = admins.remaining(request)
+            authenticated = session is not None and service.unlocked
+            if session is None and admins.identity(request):
+                admins.clear_cookie(response)
             return {"initialized": service.envelope.exists, "unlocked": authenticated,
+                    "session": session if authenticated else None,
                     "query_ready": bool(service.unlocked and settings.get("wechat_owner") and settings.get("wechat_token")),
                     "auto_restore_ready": service.query_unlock.ready,
                     "model_name": bot.engine.model, "thinking_enabled": False,
@@ -42,10 +54,13 @@ def register(app, service, bot, admins, csrf_token, qr_sessions):
     @app.post("/api/lock")
     def lock(request: Request, response: Response):
         with service.mutex:
-            identity = admins.identity(request)
             admins.revoke(request, response)
-            for qr in list(qr_sessions):
-                if qr_sessions[qr]["admin"] == identity:
-                    qr_sessions.pop(qr)
             return {"ok": True}
+
+    @app.post("/api/session/activity")
+    def activity(request: Request):
+        with service.mutex:
+            admins.require(request)
+            service.require_key()
+            return admins.activity(request)
 
