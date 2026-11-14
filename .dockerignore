@@ -1,6 +1,7 @@
 **
 !Dockerfile
 !requirements.txt
+!VERSION
 !vault/
 !vault/**
 **/__pycache__/

@@ -12,7 +12,7 @@ FILES = {
     "onnx/model_quantized.onnx": "15b717c382bcb518ba457b93ea6850ede7f4f1cd8937454aa06972366cd19bcc",
 }
 parser = argparse.ArgumentParser()
-parser.add_argument("--directory", default="/opt/wechat-vault/models/bge-small-zh-v1.5")
+parser.add_argument("--directory", default=str(Path(os.environ.get("VAULT_STATE_DIR", "/var/lib/wechat-vault")) / "models/bge-small-zh-v1.5"))
 parser.add_argument("--source", choices=("huggingface.co", "hf-mirror.com"), default="huggingface.co")
 args = parser.parse_args()
 destination = Path(args.directory)

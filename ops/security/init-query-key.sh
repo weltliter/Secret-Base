@@ -1,12 +1,12 @@
 #!/bin/sh
 set -eu
 umask 077
-PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-[ "$PROJECT_ROOT" = /opt/wechat-vault ] || { printf '%s\n' 'Run this script from its deployed /opt/wechat-vault/ops subdirectory.' >&2; exit 1; }
+VAULT_PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+. "$VAULT_PROJECT_ROOT/ops/deploy/common.sh"
 [ "$(id -u)" -eq 0 ] || { printf '%s\n' 'Run as root.' >&2; exit 1; }
-[ ! -L "$PROJECT_ROOT/secrets" ] || exit 1
-install -d -o root -g root -m 700 "$PROJECT_ROOT/secrets"
-python3 - "$PROJECT_ROOT/secrets/query-unlock.key" <<'PY'
+[ ! -L "$VAULT_STATE_DIR/secrets" ] || exit 1
+install -d -o root -g root -m 700 "$VAULT_STATE_DIR/secrets"
+python3 - "$VAULT_STATE_DIR/secrets/query-unlock.key" <<'PY'
 import os
 import secrets
 import stat
