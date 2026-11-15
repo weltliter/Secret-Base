@@ -5,5 +5,5 @@
     UserName = 'root'
     LocalPort = 18080
     RemotePort = 18080
-    KeyPath = 'C:/path/to/your-ssh-key.pem'
+    KeyPath = '<本机私钥路径>'
 }

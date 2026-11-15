@@ -19,6 +19,7 @@
         <button type="button" data-view="trash" class="nav-item"><span>回收站</span><span id="nav-trash-count" class="count">0</span></button>
         <button type="button" data-view="settings" class="nav-item"><span>微信与 AI</span></button>
         <button type="button" data-view="logs" class="nav-item"><span>查询日志</span></button>
+        <button type="button" data-view="backups" class="nav-item"><span>备份与灾备</span></button>
       </nav>
       <div class="sidebar-footer"><p>记录加密保存在服务器。<br>主密码用于管理登录，不会写入磁盘。</p><p class="small">闲置 5 分钟或登录 1 小时后锁定；切到后台立即锁定并清除未保存内容。</p><button type="button" id="lock-button" class="button button-quiet" hidden>锁定管理端</button></div>
     </aside>
@@ -70,6 +71,17 @@
         <div class="section-heading"><h2 id="query-logs-heading">最近查询</h2><button type="button" id="refresh-query-logs" class="button button-secondary">刷新日志</button></div>
         <p class="muted small">显示最近 50 次查询，日志加密保留 30 天、最多 2000 条。账号和密码不记入日志。相似度表示文本接近程度，不是匹配正确率。</p>
         <div id="query-log-list"></div><p id="query-logs-empty" class="empty-state" hidden>尚无查询日志。升级后从微信发起查询，即可在这里查看。</p>
+      </section>
+
+      <section id="backups-panel" hidden aria-labelledby="backups-heading">
+        <div class="section-heading"><h2 id="backups-heading">全量数据库备份</h2><div class="backup-actions"><button type="button" id="refresh-backups" class="button button-secondary">刷新任务</button><button type="button" id="create-backup" class="button button-primary">生成全量备份</button></div></div>
+        <p class="muted">包含所有账号、回收站、加密设置与日志，以及配套的加密密钥信封。列表筛选不会影响备份范围。</p>
+        <div class="privacy-note"><strong>换机恢复需要什么</strong><p>从 GitHub 获取兼容版本的程序，恢复下载的数据库，再输入原主密码或恢复密钥。新的 ECS 密钥仅用于连接服务器，不能解密旧密码库；请独立保存主密码或恢复密钥。</p></div>
+        <p class="muted small">先在服务器生成完整文件，再下载到本机。已开始的下载最多继续 30 分钟，切后台或管理锁定不会撤销当前传输。中断后请重新登录并从头下载，不支持断点续传。</p>
+        <p class="muted small">下载后请核对文件大小与 SHA-256，并按恢复指南演练。服务器文件就绪或浏览器开始下载，不代表本地灾备已经验证。</p>
+        <p id="backup-limits" class="muted small"></p>
+        <div id="backup-list" aria-live="polite"></div>
+        <p id="backups-empty" class="empty-state" hidden>尚无备份任务。点击“生成全量备份”，完成后下载并保存在服务器之外。</p>
       </section>
 
       <section id="settings-panel" hidden>

@@ -1293,3 +1293,11 @@ dialog::backdrop {
 .query-log-card { margin:16px 0; overflow-wrap:anywhere; }
 .query-log-card h3 { margin:0 0 8px; white-space:pre-wrap; }
 .query-log-results { padding-left:20px; }
+
+/* Data recovery tasks keep long filenames and checksums inside the viewport. */
+.backup-card { margin-top: 16px; min-width: 0; }
+.backup-card p { overflow-wrap: anywhere; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.backup-actions a { text-decoration: none; }
+.backup-hash { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+#backups-panel > .section-heading { flex-wrap: wrap; gap: 16px; }

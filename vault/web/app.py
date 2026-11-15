@@ -13,13 +13,14 @@ from fastapi.staticfiles import StaticFiles
 from ..channels.bot import BotController
 from ..core.service import VaultService
 from ..core.store import Store
+from ..backup.manager import BackupManager
 from ..search.diagnostics import configure as configure_query_logging
-from .routes import records, session, settings
+from .routes import records, session, settings, backups
 from .security import install_security, management_guard
 from .sessions import AdminSessions
 
 
-def create_app(service=None, start_bot=True):
+def create_app(service=None, start_bot=True, backup_manager=None):
     configure_query_logging()
     # HTTP client INFO messages include complete URLs, including QR login values.
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -30,10 +31,12 @@ def create_app(service=None, start_bot=True):
     admins = AdminSessions()
     csrf_token = secrets.token_urlsafe(32)
     qr_sessions = {}
+    backup_manager = backup_manager or BackupManager(service)
 
     @asynccontextmanager
     async def lifespan(app):
         service.store.initialize()
+        backup_manager.start()
         if not service.unlocked:
             try:
                 service.resume_queries()
@@ -51,19 +54,24 @@ def create_app(service=None, start_bot=True):
                         logging.getLogger("vault.maintenance").error("maintenance failed (%s)", type(exc).__name__)
                     bot.stop_event.wait(3600)
             threading.Thread(target=maintain, daemon=True, name="vault-maintenance").start()
-        yield
-        bot.stop_event.set()
-        service.lock()
+        try:
+            yield
+        finally:
+            bot.stop_event.set()
+            backup_manager.close()
+            service.lock()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.service, app.state.bot = service, bot
     app.state.admins = admins
+    app.state.backups = backup_manager
 
     management = management_guard(service, admins)
     install_security(app, admins, csrf_token)
     session.register(app, service, bot, admins, csrf_token, qr_sessions)
     records.register(app, service, management)
     settings.register(app, service, bot, admins, management, qr_sessions)
+    backups.register(app, service, admins, backup_manager)
 
     @app.get("/", response_class=HTMLResponse)
     def index():

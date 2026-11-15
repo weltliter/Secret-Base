@@ -1,90 +1,54 @@
 # 项目结构与职责
 
-根目录保留启动入口、容器配置、依赖和 README。应用按业务、检索、微信通道和管理端划分，运维与测试单独组织。
+程序源码、密码库数据和 SSH 连接身份各自独立。源码可公开发布；单个数据库转储包含恢复业务所需的持久数据与加密密钥信封；SSH 私钥只在用户本机用于连接 ECS。
 
-## 本地工作区
+## 源码职责
 
-```text
-secret/
-├── 打开管理页.cmd                # Windows 双击连接并打开浏览器
-├── console.ps1                  # 本机打开、连接、检查、状态入口
-├── client/                      # Windows SSH 隧道工具和配置
-├── vault/
-│   ├── core/                    # 加密、存储、业务、查重、查询自动恢复
-│   ├── search/                  # 混合检索、内存向量索引、诊断日志
-│   ├── channels/                # 微信协议客户端、只读查询会话
-│   └── web/
-│       ├── app.py               # 应用装配、生命周期、静态页面
-│       ├── schemas.py           # 请求输入结构
-│       ├── security.py          # 来源、CSRF、管理授权与错误处理
-│       ├── sessions.py          # 浏览器管理会话
-│       ├── routes/              # session、records、settings API
-│       ├── templates/console.html
-│       └── static/
-│           ├── css/console.css
-│           └── js/
-│               ├── main.js      # 启动、导航、共享状态、锁定清理
-│               ├── shared/      # ui、transport
-│               ├── auth/        # session 登录与初始化
-│               ├── records/     # index 协调、list、editor、duplicates
-│               │                # filter-controls、filters、tags
-│               ├── settings/    # 微信绑定与模型设置
-│               └── logs/        # 查询日志展示
-├── ops/
-│   ├── backup/                  # backup.sh、restore.sh
-│   ├── security/                # init-query-key.sh
-│   ├── models/                  # fetch-embedding.py
-│   ├── postgres/                # 初始化 SQL、Unix socket 访问配置
-│   └── checks/                  # 数据库联调、嵌入模型资源检查
-├── tests/
-│   ├── conftest.py              # 共用测试配置
-│   ├── support/                 # 共用模拟存储、样例和响应工具
-│   ├── core/                    # 加密、业务、综合查重
-│   ├── web/                     # 管理 API、会话权限
-│   ├── channels/                # 微信协议、只读通道
-│   ├── search/                  # 检索、向量、日志
-│   ├── frontend/                # filters.test.mjs
-│   └── client/                  # tunnel.ps1
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── OPERATIONS.md
-│   ├── RELEASE-1.0.md            # 1.0 范围、验证和交付边界
-│   ├── ITERATION-REQUIREMENTS.md  # 待开发需求，不代表现有行为
-│   └── security/                # 数据安全边界、安全组配置
-├── VERSION                      # 源码交付版本：1.0
-├── releases/1.0/                # 源码交付包及 SHA-256，不进入镜像
-├── Dockerfile / compose.yaml
-├── requirements.txt / requirements-dev.txt
-├── .local/                      # 仅本机：keys、ssh、临时 checks、整理快照
-└── .venv/                       # 本机维护环境
-```
-
-前端使用原生 ES modules，不需要 npm 安装或打包服务。记录列表、编辑、筛选和查重分别处理，通过 `records/index.js` 连接；公共 API 请求和 DOM 工具集中在 `shared/`。密码和业务内容不写入浏览器本地存储。
-
-测试按应用职责分组，共用支持代码只放在 `tests/support/`。单元测试、维护环境和 SSH 私钥不发布到服务器或应用镜像。
-
-## 云端工作区
-
-服务器项目根目录为 `/opt/wechat-vault`。部署内容是 `vault/`、`ops/`、`docs/`、容器配置、运行依赖、README 和 VERSION；源码交付包另含本机入口与测试，不能整包覆盖服务器。运行文件单独存放：
-
-| 路径 | 内容与保留方式 |
+| 目录或入口 | 职责 |
 | --- | --- |
-| `data/postgres/` | 数据库持久化目录，不随代码更新清理 |
-| `data/vault/vault.json` | 密钥信封，必须与数据库配套备份 |
-| `data/vault/query-unlock.json` | 查询自动启动信封；恢复备份后重新登录生成 |
-| `data/pgsocket/` | 数据库维护的共享 Unix socket |
-| `secrets/query-unlock.key` | 机器密钥，只读挂载，不进入数据库备份 |
-| `models/bge-small-zh-v1.5/` | 运行所需公开嵌入模型，只读挂载 |
-| `backups/` | 加密备份，执行备份脚本时清理超过 7 天的文件 |
-| `.env` | 服务器镜像源配置，不随代码发布覆盖 |
-| `.maintenance/checks/` | 隔离联调的临时文件，检查结束后清理 |
+| `console.ps1`、`打开管理页.cmd`、`client/` | Windows 本机 SSH 配置、隧道及浏览器启动；模板可公开，真实配置在 `.local/` |
+| `vault/core/` | 业务加密、数据库元数据、记录、查重、查询自动恢复及显式旧版迁移 |
+| `vault/search/` | 关键词与语义召回、模型排序及加密查询诊断 |
+| `vault/channels/` | 微信连接与只读查询能力接口 |
+| `vault/web/` | 应用装配、服务端管理会话、API、网页和敏感状态清理 |
+| 备份服务模块及 `vault/web/routes/backups.py` | 后台数据库导出、任务登记、校验、限额与经认证的附件下载 |
+| `ops/deploy/`、`ops/security/`、`ops/models/` | 运行目录、机器密钥、固定模型版本的准备与校验 |
+| `ops/backup/` | 命令行备份、旧格式兼容及显式数据库恢复 |
+| `ops/checks/`、`tests/` | 合成数据测试、真实数据库隔离验收、大文件恢复演练 |
+| `ops/release/` | 从已跟踪源码生成交付包并检查私有文件边界 |
 
-## 调用与权限
+前端使用原生 ES modules，不需要 npm 打包服务。记录、筛选、编辑、设置、日志和备份界面通过公共 API 传输层与主页面状态连接；业务明文不写入浏览器持久存储。
 
-管理 API 调用 `core` 完成记录变动；微信控制器通过 `QueryVault` 只读接口查询和查重。检索模块用描述字段构建内存向量，结合关键词候选交给 DeepSeek Flash 排序；最终凭据由业务代码读取。数据库通过共享 Unix socket 连接。
+## 部署与持久状态
 
-管理会话与微信查询权限的生命周期分开管理，但使用同一份业务数据密钥：管理会话从登录起固定有效 8 小时，锁定仅撤销当前浏览器，不清除供微信查询使用的数据密钥；微信自动恢复不会创建管理会话。AI 固定使用 `deepseek-flash` 并关闭思考模式。
+源码默认放在 `/opt/wechat-vault`，可以使用其他路径。状态根目录通过 `.env` 或环境变量 `VAULT_STATE_DIR` 指定，默认 `/var/lib/wechat-vault`；以下路径均相对此状态根目录。
 
-本机默认端口为 `127.0.0.1:18080`，允许选择 10000–65535。`Connect` 遇端口占用退出；`Open` 会检查该入口是否响应密码库状态，正常则复用并打开浏览器，否则报错，不停止已有进程。云端仅发布 `127.0.0.1:18080` 到容器 8000，数据库不监听 TCP；管理连接经过 SSH 默认 22 端口，可与日常 SSH 连接并存。
+| 路径 | 内容与生命周期 |
+| --- | --- |
+| `data/postgres/` | PostgreSQL 数据，包含全部业务表、结构版本与加密信封；只通过备份/恢复工具迁移 |
+| `data/pgsocket/` | 数据库与应用共享的 Unix socket |
+| `data/vault/query-unlock.json` | 本机查询启动信封；恢复后清除，首次登录重新生成 |
+| `secrets/query-unlock.key` | 此服务器独立生成的机器密钥，以只读方式挂载；不进入镜像、数据库或备份 |
+| `backups/web/` | 网页生成的数据库备份与任务登记；过期清理避开正在下载的文件 |
+| `backups/` | 命令行备份、维护互斥锁及旧版回退材料 |
+| `models/bge-small-zh-v1.5/` | 可重新下载的固定公共模型，只读挂载 |
 
-具体命令见 [运维说明](OPERATIONS.md)，数据边界见 [安全说明](security/SECURITY.md)。
+源码根目录的 `.env` 仅保存服务器本地部署选项；本机 `.local/console.psd1`、主机指纹和 SSH 私钥不进入服务器应用容器。默认镜像只包含运行源码、依赖和版本信息。
+
+## 数据版本与恢复
+
+数据库结构版本 2 用 `vault_schema` 声明结构版本，`vault_metadata` 保存密码库 UUID、应用/加密格式版本和加密密钥信封的原始字节。业务记录仍使用原有认证加密格式，不因更换主机重新加密。数据库不包含主密码、恢复密钥明文或本机机器密钥。
+
+正常运行不读取旧 `vault.json`。旧格式迁移才显式读取它，验证凭据和全部加密记录后写入数据库；新库初始化以事务保存元数据。数据库有业务数据但缺少信封或版本不受支持时拒绝初始化/启动，不生成新的替代密钥。
+
+新格式 `.dump` 是唯一必需的数据恢复文件，SHA-256 和说明文件是校验辅助。换机后获取兼容源码、恢复数据库，使用原主密码或恢复密钥登录；新 ECS 的 SSH 密钥仅影响能否连接服务器。详见 [恢复指南](RECOVERY.md) 与 [数据边界](DATA-BOUNDARY.md)。
+
+## 权限与运行生命周期
+
+管理 API 调用业务层进行修改，微信控制器通过 `QueryVault` 只读接口查询和查重。AI 只接收允许检索的描述字段与候选 ID，不接触机密字段或业务写入能力。数据库仅监听 Unix socket，以 `vault_app` 角色供应用访问。
+
+管理会话闲置 5 分钟或登录后达到 1 小时即失效；只有用户活动接口可以更新闲置期限，轮询与下载不续期。页面切后台立即清理敏感内容并尝试注销，同一浏览器共享会话的标签页同步锁定。微信运行数据密钥生命周期独立，管理锁定不停止查询；机器启动信封只恢复查询能力，不创建管理会话。
+
+后台导出及已批准下载不长期持有业务全局锁。管理锁定后，已经批准的当前下载可在最长 30 分钟授权内完成；新下载仍需重新登录。备份、迁移和恢复使用共享维护锁避免互相覆盖状态。
+
+服务器仅发布 `127.0.0.1:18080`。本机隧道默认使用同端口，也可选 10000–65535；既有可用隧道可由启动器复用，端口冲突不会结束其他进程。应用不会依据 ECS 实例、地址、SSH 身份或私钥指纹决定数据访问权限。

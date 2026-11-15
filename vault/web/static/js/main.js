@@ -5,6 +5,7 @@ import { createSettings } from "./settings/index.js";
 import { bindSession } from "./auth/session.js";
 import { createLogs } from "./logs/index.js";
 import { createProtection } from "./auth/protection.js";
+import { createBackups } from "./backups/index.js";
 
 const state = { reauthRequired: true, status: null, view: "entries", entries: [], editing: null, generation: 0, revealed: new Map(), revealTimers: new Map(), qr: null, qrTimer: null, qrStartedAt: 0, qrPolling: false, noticeTimer: null };
 const { notify, busy, copyText } = createUi(state);
@@ -19,7 +20,8 @@ const api = Object.assign(async (path, ...args) => {
 const settings = createSettings({ state, api, notify, busy, loadStatus });
 const records = createRecords({ state, api, notify, busy, copyText, loadStatus });
 const logs = createLogs({ state, api, busy, notify });
-const loadView = () => state.view === "logs" ? logs.load() : records.loadEntries();
+const backups = createBackups({ state, api, notify, busy });
+const loadView = () => state.view === "backups" ? backups.load() : state.view === "logs" ? logs.load() : records.loadEntries();
 protection = createProtection({ api, isAuthenticated: () => !!state.status?.unlocked && !state.reauthRequired, lock: lockLocal });
 bindSession({ api, notify, busy, copyText, loadStatus, loadEntries: loadView, changeView,
   lock: () => protection.lock("管理端已锁定，微信查询服务保持运行。"),
@@ -52,6 +54,7 @@ function publicStatus(status) {
 function clearSensitive() {
   state.generation += 1;
   api.cancel();
+  backups.clear();
   clearTimeout(state.noticeTimer);
   $("notice").hidden = true;
   $("notice").textContent = "";
@@ -93,6 +96,7 @@ function renderState() {
   $("entries-panel").hidden = !unlocked || !["entries", "trash"].includes(state.view);
   $("settings-panel").hidden = !unlocked || state.view !== "settings";
   $("query-logs-panel").hidden = !unlocked || state.view !== "logs";
+  $("backups-panel").hidden = !unlocked || state.view !== "backups";
   if (!status) return;
 
   $("nav-entry-count").textContent = String(status.entry_count ?? 0);
@@ -109,7 +113,7 @@ function renderState() {
     $("page-title").textContent = "登录管理端";
     $("page-description").textContent = "登录后可以新增、修改和删除账号记录。微信查询独立运行。";
   } else {
-    const headings = { entries: ["账号记录", "把账号和使用场景放在一起，想起来时就能找到。"], trash: ["回收站", "已删除的记录保留 30 天，可以在这里恢复。"], settings: ["微信与 AI", "绑定你的微信，并配置用于理解查询的模型。"], logs: ["查询日志", "查看微信查询的召回、排序和运行情况，便于核对结果。"] };
+    const headings = { entries: ["账号记录", "把账号和使用场景放在一起，想起来时就能找到。"], trash: ["回收站", "已删除的记录保留 30 天，可以在这里恢复。"], settings: ["微信与 AI", "绑定你的微信，并配置用于理解查询的模型。"], logs: ["查询日志", "查看微信查询的召回、排序和运行情况，便于核对结果。"], backups: ["备份与灾备", "保存完整数据库，在新服务器恢复你的密码库。"] };
     $("page-title").textContent = headings[state.view][0];
     $("page-description").textContent = headings[state.view][1];
   }
@@ -154,6 +158,7 @@ async function changeView(view) {
   if (!state.status?.unlocked) return;
   state.generation += 1;
   state.view = view;
+  backups.clear();
   records.resetFilters();
   state.entries = [];
   state.revealed.clear();
