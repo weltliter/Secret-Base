@@ -20,9 +20,10 @@ function fixture(t, api) {
 
   const state = { status: { unlocked: true }, view: "backups", generation: 0 };
   const notices = [];
-  const backups = createBackups({ state, api, notify: (...args) => notices.push(args), busy: (_, action) => action() });
+  const locks = [];
+  const backups = createBackups({ state, api, notify: (...args) => notices.push(args), busy: (_, action) => action(), lock: (message) => locks.push(message) });
   t.after(() => { backups.clear(); globalThis.document = previous; });
-  return { state, backups, notices, get: (id) => elements.get(id) };
+  return { state, backups, notices, locks, get: (id) => document.getElementById(id) };
 }
 const ready = { id: "synthetic", status: "ready", filename: "vault.dump", size_bytes: 600 * 1024 ** 2, sha256: "a".repeat(64), created_at: "2026-01-01T00:00:00Z", expires_at: "2026-01-08T00:00:00Z" };
 test("backup page offers native authenticated attachment links and does not claim success", async (t) => {
@@ -61,4 +62,35 @@ test("a new login can load tasks while an older cancelled request is still settl
   const text = descendants(f.get("backup-list")).map((element) => element.textContent).join(" ");
   assert.match(text, /vault.dump/);
   assert.doesNotMatch(text, /stale.dump/);
+});
+
+test("restore requires file and confirmation, sends raw file, and locks on success", async (t) => {
+  const calls = [];
+  const f = fixture(t, async (...args) => { calls.push(args); return { ok: true }; });
+  const file = { name: "backup.dump", size: 300000 };
+  f.get("restore-file").files = [file];
+  const submit = () => f.get("restore-form").fire("submit", { preventDefault() {} });
+  await submit();
+  assert.equal(calls.length, 0);
+  f.get("restore-confirm").checked = true;
+  await submit();
+  assert.equal(calls[0][0], "/api/backups/restore");
+  assert.equal(calls[0][2], file);
+  assert.equal(calls[0][3].upload, true);
+  assert.match(f.locks[0], /全量恢复成功/);
+  assert.equal(f.state.restoring, false);
+  f.backups.clear();
+  assert.equal(f.get("restore-file").value, "");
+  assert.equal(f.get("restore-confirm").checked, false);
+});
+
+test("restore failure and late response never claim successful recovery", async (t) => {
+  let finish;
+  const f = fixture(t, () => new Promise((resolve) => { finish = resolve; }));
+  f.get("restore-file").files = [{ name: "backup.dump", size: 100 }];
+  f.get("restore-confirm").checked = true;
+  const pending = f.get("restore-form").fire("submit", { preventDefault() {} });
+  f.state.generation++; f.backups.clear();
+  finish({ ok: true }); await pending;
+  assert.deepEqual(f.locks, []);
 });

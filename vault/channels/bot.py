@@ -180,8 +180,11 @@ class BotController:
                     if not context or message_id is None:
                         continue
                     digest = hashlib.sha256((settings.get("wechat_bot_id", "") + ":" + settings["wechat_owner"] + ":" + str(message_id)).encode()).hexdigest()
-                    if not self.service.mark_message(digest):
-                        continue
+                    with self.service.mutex:
+                        if epoch != self.service.epoch or not self.service.unlocked:
+                            break
+                        if not self.service.mark_message(digest):
+                            continue
                     parts = [item["text_item"]["text"] for item in message.get("item_list", [])
                              if isinstance(item, dict) and item.get("type") == 1
                              and isinstance(item.get("text_item"), dict)

@@ -110,6 +110,12 @@ class AdminSessions:
         self._notify_revoked([identity])
         self.clear_cookie(response)
 
+    def revoke_all(self):
+        with self.mutex:
+            identities = list(self.sessions)
+            self.sessions.clear()
+        self._notify_revoked(identities)
+
     @staticmethod
     def clear_cookie(response):
         response.delete_cookie(COOKIE, path="/", httponly=True, samesite="strict")

@@ -24,6 +24,9 @@ ERRORS = {
     "interrupted": "生成任务被中断，请重新生成备份。",
     "tools": "需要 PostgreSQL 17 导出和恢复工具。",
     "export": "数据库导出或完整性检查失败，请检查服务配置。",
+    "invalid_restore": "备份文件损坏、格式不兼容或缺少完整数据，原数据库未替换。请上传 1.1 版本生成的 .dump 文件。",
+    "restore": "恢复未完成，原数据库未替换。请检查服务器空间及数据库状态后重试。",
+    "restore_timeout": "上传或恢复超时，原数据库未替换，请重新上传。",
 }
 
 
@@ -132,7 +135,7 @@ class BackupManager:
                     continue
             # Only remove files in our strict naming namespace; never other backups.
             for path in self.directory.iterdir():
-                if path.suffix in (".part", ".tmp") and ID.fullmatch(path.stem) and regular(path):
+                if path.suffix in (".part", ".tmp", ".sql") and ID.fullmatch(path.stem) and regular(path):
                     path.unlink()
             self.started = True
             self.cleanup()
@@ -228,7 +231,7 @@ class BackupManager:
     def _space(self):
         with self.mutex:
             used = sum(path.stat().st_size for path in self.directory.iterdir()
-                       if regular(path) and ID.fullmatch(path.stem) and path.suffix in (".dump", ".part", ".json", ".tmp", ".sha256"))
+                       if regular(path) and ID.fullmatch(path.stem) and path.suffix in (".dump", ".part", ".json", ".tmp", ".sha256", ".sql"))
             if used >= self.limits["quota_bytes"] or shutil.disk_usage(self.directory).free < self.limits["reserve_bytes"]:
                 raise BackupError("space", 507)
 

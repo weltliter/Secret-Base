@@ -4,9 +4,9 @@ const when = (value) => value ? new Date(value).toLocaleString("zh-CN") : "—";
 const statuses = { generating: "正在生成", ready: "服务器备份已就绪", failed: "生成失败", expired: "已过期" };
 const phases = { queued: "等待处理", dump: "导出数据库", dumping: "导出数据库", validate: "检查转储", validating: "检查转储", hash: "计算校验值", hashing: "计算校验值", ready: "可下载" };
 
-export function createBackups({ state, api, notify, busy }) {
-  let timer = null, loading = false, sequence = 0;
-  function clear() { sequence += 1; loading = false; clearTimeout(timer); timer = null; $("backup-list").replaceChildren(); $("backup-limits").textContent = ""; }
+export function createBackups({ state, api, notify, busy, lock }) {
+  let timer = null, loading = false, sequence = 0, limits = {};
+  function clear() { sequence += 1; loading = false; clearTimeout(timer); timer = null; $("backup-list").replaceChildren(); $("backup-limits").textContent = ""; $("restore-file").value = ""; $("restore-confirm").checked = false; $("restore-progress").textContent = ""; }
   async function load() {
     if (!state.status?.unlocked || state.view !== "backups" || loading) return;
     loading = true;
@@ -17,7 +17,7 @@ export function createBackups({ state, api, notify, busy }) {
       const result = await api("/api/backups");
       if (current !== sequence || generation !== state.generation || !state.status?.unlocked || state.view !== "backups") return;
       const tasks = result.tasks || [];
-      const limits = result.limits || {};
+      limits = result.limits || {};
       $("backup-limits").textContent = "保留 " + (limits.retention_days ?? 7) + " 天 · 配额 " + formatBytes(limits.quota_bytes ?? 5368709120) + " · 最低剩余空间 " + formatBytes(limits.reserve_bytes ?? 1073741824) + " · 生成时限 " + Math.round((limits.timeout_seconds ?? 1800) / 60) + " 分钟";
       $("backup-list").replaceChildren();
       $("backups-empty").hidden = tasks.length > 0;
@@ -55,5 +55,24 @@ export function createBackups({ state, api, notify, busy }) {
     await load();
   }));
   $("refresh-backups").addEventListener("click", (event) => busy(event.currentTarget, load));
+  $("restore-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    return busy($("restore-backup"), async () => {
+      const file = $("restore-file").files?.[0];
+      if (!state.status?.unlocked || !file || !$("restore-confirm").checked) return;
+      if (!/\.(dump|pgdump)$/i.test(file.name) || !file.size) throw new Error("请选择非空的 .dump 数据库备份文件。");
+      if (file.size > (limits.quota_bytes ?? 5368709120)) throw new Error("文件超过服务器备份目录配额。");
+      const generation = state.generation;
+      state.restoring = true;
+      $("restore-progress").textContent = "正在上传、校验并恢复，请保持页面打开。大文件可能需要较长时间。";
+      try {
+        await api("/api/backups/restore", "POST", file, { upload: true, timeout: ((limits.timeout_seconds ?? 1800) + 30) * 1000 });
+        if (generation === state.generation) lock("全量恢复成功。请使用备份对应的主密码或恢复密钥重新登录，恢复微信查询。");
+      } finally {
+        state.restoring = false;
+        if (generation === state.generation) $("restore-progress").textContent = "";
+      }
+    });
+  });
   return { load, clear };
 }

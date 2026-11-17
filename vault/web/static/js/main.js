@@ -20,7 +20,7 @@ const api = Object.assign(async (path, ...args) => {
 const settings = createSettings({ state, api, notify, busy, loadStatus });
 const records = createRecords({ state, api, notify, busy, copyText, loadStatus });
 const logs = createLogs({ state, api, busy, notify });
-const backups = createBackups({ state, api, notify, busy });
+const backups = createBackups({ state, api, notify, busy, lock: (message) => protection.lock(message) });
 const loadView = () => state.view === "backups" ? backups.load() : state.view === "logs" ? logs.load() : records.loadEntries();
 protection = createProtection({ api, isAuthenticated: () => !!state.status?.unlocked && !state.reauthRequired, lock: lockLocal });
 bindSession({ api, notify, busy, copyText, loadStatus, loadEntries: loadView, changeView,
@@ -139,6 +139,7 @@ function renderState() {
 }
 
 async function loadStatus() {
+  if (state.restoring) return state.status;
   const generation = state.generation;
   const previousUnlocked = state.status?.unlocked;
   let status = await api("/api/status");

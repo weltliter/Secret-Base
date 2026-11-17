@@ -49,7 +49,8 @@ def create_app(service=None, start_bot=True, backup_manager=None):
             def maintain():
                 while not bot.stop_event.is_set():
                     try:
-                        service.store.maintenance()
+                        with service.mutex:
+                            service.store.maintenance()
                     except Exception as exc:
                         logging.getLogger("vault.maintenance").error("maintenance failed (%s)", type(exc).__name__)
                     bot.stop_event.wait(3600)

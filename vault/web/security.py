@@ -50,9 +50,11 @@ def install_security(app, admins, csrf_token):
             return failure("请求长度无效", 400)
         if content_length < 0:
             return failure("请求长度无效", 400)
-        if content_length > MAX_REQUEST_BYTES:
+        restore_upload = request.method == "POST" and request.url.path == "/api/backups/restore"
+        maximum = app.state.backups.limits["quota_bytes"] if restore_upload else MAX_REQUEST_BYTES
+        if content_length > maximum:
             return failure("请求过大", 413)
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
+        if request.method not in ("GET", "HEAD", "OPTIONS") and not restore_upload:
             # Enforce the same bound on chunked bodies before JSON parsing. Starlette's
             # cached request replays this body to the downstream FastAPI handler.
             body = bytearray()

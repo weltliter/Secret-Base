@@ -49,7 +49,7 @@ export function createApi(onLocked, options = {}) {
     return probing;
   }
 
-  async function api(path, method = "GET", body) {
+  async function api(path, method = "GET", body, options = {}) {
     const generation = epoch;
     const headers = { Accept: "application/json" };
     try {
@@ -57,11 +57,12 @@ export function createApi(onLocked, options = {}) {
       if (path === "/api/unlock" || path === "/api/setup") await revoking;
       check(generation);
       if (method !== "GET") {
-        headers["Content-Type"] = "application/json";
+        headers["Content-Type"] = options.upload ? "application/octet-stream" : "application/json";
+        if (options.upload) headers["X-Vault-Confirm-Replace"] = "replace-all";
         headers["X-Vault-CSRF"] = await token(generation);
       }
       check(generation);
-      const { response, payload } = await request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      const { response, payload } = await request(path, { method, headers, body: options.upload ? body : body === undefined ? undefined : JSON.stringify(body) }, options.timeout || 5000);
       check(generation);
       if (!response.ok) {
         if (response.status === 403) csrf = null;

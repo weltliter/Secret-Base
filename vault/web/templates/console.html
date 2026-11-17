@@ -82,6 +82,18 @@
         <p id="backup-limits" class="muted small"></p>
         <div id="backup-list" aria-live="polite"></div>
         <p id="backups-empty" class="empty-state" hidden>尚无备份任务。点击“生成全量备份”，完成后下载并保存在服务器之外。</p>
+        <article class="settings-card usage-card" aria-labelledby="restore-heading">
+          <h2 id="restore-heading">上传数据库并全量恢复</h2>
+          <p>上传 1.1 版本生成的 .dump 备份文件。恢复会删除全部现有账号、回收站、设置、日志和密钥信封，并用备份中的数据完整替换，不保留或合并现有记录。</p>
+          <p class="muted small">建议先下载当前数据库备份。恢复成功后所有管理会话失效，微信查询暂停；请使用备份对应的原主密码或恢复密钥重新登录。旧 .tar.gz 备份请按恢复指南迁移。</p>
+          <form id="restore-form" autocomplete="off">
+            <label for="restore-file">数据库备份文件（.dump）</label><input id="restore-file" type="file" accept=".dump,.pgdump,application/octet-stream" required aria-describedby="restore-help">
+            <p id="restore-help" class="field-help">上传和校验期间请保持此页面打开。退出或锁定会取消尚未开始的替换；替换已开始时会完成或回滚，请重新登录核对数据后再重试。</p>
+            <label class="reuse-option"><input id="restore-confirm" type="checkbox" required>我确认删除全部现有数据，并使用所选备份全量恢复</label>
+            <button id="restore-backup" type="submit" class="button button-danger">上传并全量恢复</button>
+            <p id="restore-progress" class="muted small" role="status" aria-live="polite"></p>
+          </form>
+        </article>
       </section>
 
       <section id="settings-panel" hidden>
