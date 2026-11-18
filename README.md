@@ -1,9 +1,7 @@
 # 微信个人密码库
 
-阶段版本 **1.1-rc.1**。账号资料加密保存在自己的服务器，由 Web 管理台维护，通过绑定的微信只读查询。
+当前整理采用独立的 Windows 管理端和 ECS 服务目录。
 
-数据库包含完整的加密信封和业务数据，可用单文件备份迁移，并使用原主密码或恢复密钥解锁。已初始化的管理台也支持上传兼容的数据库备份并全量恢复。
-
-部署与验证见[运维说明](docs/OPERATIONS.md)和[架构说明](docs/ARCHITECTURE.md)。
-
-Windows 管理入口为 `打开管理页.cmd`。先用 `.\console.ps1 -Action Configure` 配置自己的服务器和私钥路径。首次连接核对服务器的 SSH 主机指纹。
+- Windows 管理端见 [管理端指南](admin/USAGE.md)。
+- ECS 部署与运维见 [运维说明](ecs/docs/OPERATIONS.md)。
+- 备份迁移与恢复见 [恢复指南](ecs/docs/RECOVERY.md)。
