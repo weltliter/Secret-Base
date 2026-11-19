@@ -1,6 +1,5 @@
 # 微信个人密码库
 
-> 本仓库为首次公开发布，按功能里程碑重建了 0.1 至 1.1 的 Git 历史。提交日期是 2026 年 11 月 2 日至 19 日（北京时间）的模拟时间线。
 
 当前版本 **1.1，含数据库上传全量恢复补丁**。账号资料加密保存在自己的 ECS，通过 Windows 管理页维护，通过绑定的微信查询。
 
@@ -124,20 +123,5 @@ cd ../admin
 ```
 
 真实 PostgreSQL 恢复测试需要显式指定专用合成测试库，未配置时跳过；详见[运维与验证](ecs/docs/OPERATIONS.md)。
-
-## GitHub 发布范围
-
-公开范围只有 `admin/`、`ecs/` 和本 README 中的通用源码、测试与模板。两端 `.gitignore` 排除实际 `config.env`、`.local/`、私钥、数据库、备份、模型、依赖和生成包。Docker 构建采用白名单，只复制应用源码、依赖清单和版本文件。
-
-整理后的源码导出入口：
-
-```powershell
-python ecs/ops/release/package.py --check
-python ecs/ops/release/package.py
-```
-
-打包工具核对 Git 跟踪清单及必需入口，拒绝私有文件，输出到忽略的 `ecs/releases/`。变更须先纳入 Git 索引，再打包；导出包带文件校验清单，不含真实配置，使用者按模板创建自己的两份配置。
-
-**上传 GitHub 时，从检查后的源码包建立干净仓库。不要复制当前 `.git/`，也不要推送所有旧分支、标签或使用 `--mirror`。** 本地旧历史含有真实连接信息，当前的 `.gitignore` 不会删除历史内容。旧版本与完整运维记录仅留在本机私有目录用于回退。
 
 更多说明：[管理端指南](admin/USAGE.md) · [项目架构](ecs/docs/ARCHITECTURE.md) · [数据边界](ecs/docs/DATA-BOUNDARY.md) · [安全说明](ecs/docs/security/SECURITY.md)
